@@ -4,11 +4,12 @@ import { Header } from "@/components/Header";
 import { SubmissionPanel } from "@/components/SubmissionPanel";
 import { ProgressPanel } from "@/components/ProgressPanel";
 import { ReportPanel } from "@/components/ReportPanel";
+import { DeploymentGuide } from "@/components/DeploymentGuide";
 import { useAnalysisEngine } from "@/hooks/useAnalysisEngine";
 
 export default function App() {
   const engine = useAnalysisEngine();
-  const [activeView, setActiveView] = useState<"submit" | "progress" | "report">("submit");
+  const [activeView, setActiveView] = useState<"submit" | "progress" | "report" | "deploy">("submit");
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -17,6 +18,7 @@ export default function App() {
         {activeView === "submit" && <SubmissionPanel engine={engine} setActiveView={setActiveView} />}
         {activeView === "progress" && <ProgressPanel engine={engine} setActiveView={setActiveView} />}
         {activeView === "report" && <ReportPanel engine={engine} setActiveView={setActiveView} />}
+        {activeView === "deploy" && <DeploymentGuide />}
       </main>
       <AuditConsole entries={engine.auditLog} />
     </div>
