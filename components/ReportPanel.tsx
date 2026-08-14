@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 
 interface ReportPanelProps {
   engine: any;
-  setActiveView: (v: "submit" | "progress" | "report") => void;
+  setActiveView: (v: "submit" | "progress" | "report" | "deploy") => void;
 }
 
 const severityConfig: Record<string, { color: string; bg: string; border: string; icon: any }> = {
@@ -43,7 +43,6 @@ export function ReportPanel({ engine, setActiveView }: ReportPanelProps) {
 
   return (
     <div className="pt-8 space-y-6">
-      {/* Summary header */}
       <Card className="bg-slate-900 border-slate-800 rounded-2xl">
         <CardHeader>
           <div className="flex items-start justify-between">
@@ -93,7 +92,6 @@ export function ReportPanel({ engine, setActiveView }: ReportPanelProps) {
         </CardContent>
       </Card>
 
-      {/* Findings table */}
       <Card className="bg-slate-900 border-slate-800 rounded-2xl">
         <CardHeader>
           <CardTitle className="text-slate-100 text-base">Findings & AI Triage</CardTitle>
@@ -143,7 +141,6 @@ export function ReportPanel({ engine, setActiveView }: ReportPanelProps) {
         </CardContent>
       </Card>
 
-      {/* Code snippet example */}
       {report.codeSnippets.length > 0 && (
         <Card className="bg-slate-950 border-slate-800 rounded-2xl">
           <CardHeader>
