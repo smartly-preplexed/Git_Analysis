@@ -288,3 +288,21 @@ a { color: inherit; text-decoration: none; }
   .finding-location { display: none; }
   .finding-detail { padding-left: 18px; }
 }
+
+/* Shared-server queue state */
+.capacity-strip { margin-top: 10px; display: grid; grid-template-columns: repeat(3,1fr); border: 1px solid #17283a; background: #060c14; }
+.capacity-strip span { padding: 8px 9px; color: #52677d; font-size: 8px; text-align: center; border-right: 1px solid #17283a; }
+.capacity-strip span:last-child { border-right: 0; }
+.capacity-strip b { color: #9bb2c8; font-family: Consolas, monospace; }
+.job-state.queued { color: var(--yellow); border-color: #5a4a25; }
+.queue-banner { margin: -4px -4px 20px; padding: 13px 15px; border: 1px solid #4b4024; background: linear-gradient(90deg, rgba(247,200,91,.08), rgba(247,200,91,.02)); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.queue-banner small { display: block; color: #8c7947; font-size: 8px; letter-spacing: .17em; }
+.queue-banner strong { display: block; margin-top: 4px; color: var(--yellow); font: 800 13px Consolas, monospace; }
+.queue-banner > span { color: #887a57; font: 9px Consolas, monospace; }
+
+@media (max-width: 520px) {
+  .capacity-strip { grid-template-columns: 1fr; }
+  .capacity-strip span { border-right: 0; border-bottom: 1px solid #17283a; }
+  .capacity-strip span:last-child { border-bottom: 0; }
+  .queue-banner { align-items: flex-start; flex-direction: column; gap: 8px; }
+}

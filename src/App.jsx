@@ -29,6 +29,58 @@ const PIPELINE = [
 
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
 const EMPTY_FINDINGS = []
+const ACTIVE_JOB_KEY = 'software-vetter.active-analysis-id'
+
+function readActiveJobId() {
+  // URL state is the primary reconnect mechanism because it works even when
+  // sessionStorage is blocked by browser privacy or enterprise policy.
+  try {
+    const fromUrl = new URL(globalThis.location.href).searchParams.get('job')
+    if (fromUrl) return fromUrl
+  } catch {
+    // Fall through to optional session storage.
+  }
+
+  try {
+    return globalThis.sessionStorage?.getItem(ACTIVE_JOB_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+function persistActiveJobId(jobId) {
+  if (!jobId) return
+
+  try {
+    globalThis.sessionStorage?.setItem(ACTIVE_JOB_KEY, jobId)
+  } catch {
+    // Storage is an optional convenience only.
+  }
+
+  try {
+    const url = new URL(globalThis.location.href)
+    url.searchParams.set('job', jobId)
+    globalThis.history?.replaceState?.(null, '', url)
+  } catch {
+    // A scan must never depend on URL/history mutation succeeding.
+  }
+}
+
+function clearActiveJobId() {
+  try {
+    globalThis.sessionStorage?.removeItem(ACTIVE_JOB_KEY)
+  } catch {
+    // Storage may be unavailable.
+  }
+
+  try {
+    const url = new URL(globalThis.location.href)
+    url.searchParams.delete('job')
+    globalThis.history?.replaceState?.(null, '', url)
+  } catch {
+    // Ignore history restrictions.
+  }
+}
 
 function providerFor(value) {
   try {
@@ -66,10 +118,40 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((res) => res.json())
-      .then(setHealth)
-      .catch(() => setHealth({ ok: false, reposec: { available: false }, git: { available: false } }))
+    let cancelled = false
+    const refreshHealth = () => {
+      fetch('/api/health', { cache: 'no-store' })
+        .then((res) => res.json())
+        .then((payload) => { if (!cancelled) setHealth(payload) })
+        .catch(() => { if (!cancelled) setHealth({ ok: false, reposec: { available: false }, git: { available: false } }) })
+    }
+    refreshHealth()
+    const timer = setInterval(refreshHealth, 5000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [])
+
+  // Restore the active job after a browser refresh/HMR reload. This keeps a
+  // long RepoSec scan visible even if the WebUI itself reloads unexpectedly.
+  useEffect(() => {
+    const activeJobId = readActiveJobId()
+    if (!activeJobId) return
+
+    let cancelled = false
+    fetch(`/api/analyses/${activeJobId}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error('saved analysis is no longer available')
+        return res.json()
+      })
+      .then((savedJob) => {
+        if (cancelled) return
+        setJob(savedJob)
+        setView(savedJob.status === 'completed' ? 'report' : 'progress')
+      })
+      .catch(() => {
+        clearActiveJobId()
+      })
+
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -77,8 +159,10 @@ function App() {
     const timer = setInterval(async () => {
       try {
         const res = await fetch(`/api/analyses/${job.id}`)
+        if (!res.ok) throw new Error(`Analysis status request failed (${res.status})`)
         const next = await res.json()
         setJob(next)
+        persistActiveJobId(next.id)
         if (next.status === 'completed') setView('report')
       } catch {
         // Keep the last known job visible; the next poll may recover.
@@ -97,10 +181,18 @@ function App() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ repoUrl, phases }),
       })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error || 'Unable to start analysis.')
+      const responseText = await res.text()
+      let payload = {}
+      try {
+        payload = responseText ? JSON.parse(responseText) : {}
+      } catch {
+        throw new Error(`Analysis API returned an invalid response (${res.status}).`)
+      }
+      if (!res.ok) throw new Error(payload.error || `Unable to start analysis (${res.status}).`)
+      if (!payload.id) throw new Error('Analysis API did not return a job ID.')
       setJob(payload)
       setView('progress')
+      persistActiveJobId(payload.id)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -116,6 +208,7 @@ function App() {
   }
 
   function reset() {
+    clearActiveJobId()
     setJob(null)
     setError('')
     setView('submit')
@@ -184,7 +277,7 @@ function Header({ view, setView, health, progressEnabled, reportEnabled, onReset
         <span className="status-dot" />
         <div>
           <strong>{status === 'online' ? 'ENGINE READY' : status === 'checking' ? 'CHECKING ENGINE' : 'ENGINE OFFLINE'}</strong>
-          <small>{health?.reposec?.path || '/usr/local/bin/reposec'}</small>
+          <small>{health?.scheduler ? `${health.scheduler.maxConcurrent} scan slots · ${health.scheduler.queued} queued` : (health?.reposec?.path || '/usr/local/bin/reposec')}</small>
         </div>
       </div>
     </header>
@@ -194,7 +287,7 @@ function Header({ view, setView, health, progressEnabled, reportEnabled, onReset
 function SubmitView({ repoUrl, setRepoUrl, phases, setPhases, health, error, submitting, onSubmit }) {
   const provider = providerFor(repoUrl)
   const enabledCount = Object.values(phases).filter(Boolean).length
-  const ready = Boolean(repoUrl.trim()) && enabledCount > 0 && health?.ok && !submitting
+  const ready = Boolean(repoUrl.trim()) && enabledCount > 0 && !submitting
 
   return (
     <section className="submit-layout">
@@ -230,6 +323,13 @@ function SubmitView({ repoUrl, setRepoUrl, phases, setPhases, health, error, sub
           <span className="provider-chip">{provider}</span>
         </div>
         <div className="field-help">Public repositories work immediately. Private repositories use your machine's existing Git credentials.</div>
+        {health?.scheduler && (
+          <div className="capacity-strip">
+            <span><b>{health.scheduler.maxConcurrent}</b> concurrent scan slots</span>
+            <span><b>{health.scheduler.maxQueued}</b> queue capacity</span>
+            <span><b>{health.timeoutMinutes}</b> min timeout</span>
+          </div>
+        )}
 
         <div className="section-heading">
           <span>SCAN SCOPE</span>
@@ -290,6 +390,7 @@ function SubmitView({ repoUrl, setRepoUrl, phases, setPhases, health, error, sub
 function ProgressView({ job, onCancel, onReport }) {
   const activeIndex = PIPELINE.findIndex(([id]) => id === job.stage)
   const complete = job.status === 'completed'
+  const queued = job.status === 'queued'
   const terminal = ['failed', 'cancelled'].includes(job.status)
 
   return (
@@ -304,6 +405,15 @@ function ProgressView({ job, onCancel, onReport }) {
       </div>
 
       <div className="progress-card">
+        {queued && (
+          <div className="queue-banner">
+            <div>
+              <small>WAITING FOR CAPACITY</small>
+              <strong>Queue position #{job.queuePosition || 1}</strong>
+            </div>
+            <span>{job.scheduler?.active || 0} / {job.scheduler?.maxConcurrent || 1} scan slots active</span>
+          </div>
+        )}
         <div className="progress-topline">
           <div>
             <small>CURRENT STAGE</small>
@@ -317,12 +427,12 @@ function ProgressView({ job, onCancel, onReport }) {
           {PIPELINE.map(([id, label], index) => {
             const skipped = ['osint', 'sca', 'sast', 'container', 'binary'].includes(id) && !job.enabledPhases.includes(id)
             const done = complete || index < activeIndex
-            const active = !complete && index === activeIndex && !terminal
+            const active = !queued && !complete && index === activeIndex && !terminal
             return (
               <div key={id} className={`pipeline-step ${done ? 'done' : ''} ${active ? 'active' : ''} ${skipped ? 'skipped' : ''}`}>
                 <span className="pipeline-node">{skipped ? '–' : done ? '✓' : index + 1}</span>
                 <strong>{label}</strong>
-                <small>{skipped ? 'SKIPPED' : done ? 'DONE' : active ? 'RUNNING' : 'WAITING'}</small>
+                <small>{skipped ? 'SKIPPED' : done ? 'DONE' : active ? 'RUNNING' : queued ? 'QUEUED' : 'WAITING'}</small>
               </div>
             )
           })}
@@ -339,7 +449,11 @@ function ProgressView({ job, onCancel, onReport }) {
             <span>PROVIDER</span><strong>{job.provider}</strong>
           </div>
           <div className="detail-card">
-            <span>STARTED</span><strong>{formatDate(job.startedAt)}</strong>
+            <span>{queued ? 'QUEUED AT' : 'STARTED'}</span><strong>{formatDate(queued ? job.createdAt : job.startedAt)}</strong>
+          </div>
+          <div className="detail-card">
+            <span>{queued ? 'QUEUE POSITION' : 'SERVER SLOTS'}</span>
+            <strong>{queued ? `#${job.queuePosition || 1}` : `${job.scheduler?.active || 0} / ${job.scheduler?.maxConcurrent || 1}`}</strong>
           </div>
           <div className="detail-card">
             <span>SCOPES</span><strong>{job.enabledPhases.length}</strong>
@@ -357,19 +471,29 @@ function ProgressView({ job, onCancel, onReport }) {
 }
 
 function LogStream({ logs }) {
-  const endRef = useRef(null)
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), [logs.length])
+  const streamRef = useRef(null)
+  const safeLogs = Array.isArray(logs) ? logs : EMPTY_FINDINGS
+
+  useEffect(() => {
+    // Do not implicitly return scrollIntoView(). New Chromium builds return a
+    // Promise from scrolling APIs; React would interpret that return value as
+    // an Effect cleanup function and later throw "... is not a function".
+    // Directly updating the scroll container is synchronous and browser-neutral.
+    const stream = streamRef.current
+    if (!stream) return
+    stream.scrollTop = stream.scrollHeight
+  }, [safeLogs.length])
+
   return (
-    <div className="log-stream">
-      {logs.length === 0 && <div className="log-placeholder">Waiting for analyzer output…</div>}
-      {logs.map((entry, index) => (
-        <div className={`log-row ${entry.source}`} key={`${entry.at}-${index}`}>
-          <span>{new Date(entry.at).toLocaleTimeString([], { hour12: false })}</span>
-          <b>{entry.source}</b>
-          <code>{entry.message}</code>
+    <div className="log-stream" ref={streamRef}>
+      {safeLogs.length === 0 && <div className="log-placeholder">Waiting for analyzer output…</div>}
+      {safeLogs.map((entry, index) => (
+        <div className={`log-row ${entry?.source || 'system'}`} key={`${entry?.at || 'log'}-${index}`}>
+          <span>{entry?.at ? new Date(entry.at).toLocaleTimeString([], { hour12: false }) : '--:--:--'}</span>
+          <b>{entry?.source || 'system'}</b>
+          <code>{entry?.message || ''}</code>
         </div>
       ))}
-      <div ref={endRef} />
     </div>
   )
 }
