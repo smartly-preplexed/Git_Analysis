@@ -1,4 +1,4 @@
-# Software Vetter · RepoSec WebUI v1.2.1
+# Repo Analysis
 
 A shared-server React interface for running RepoSec against GitHub and GitLab repositories.
 
