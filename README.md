@@ -1,4 +1,4 @@
-# Software Vetter · RepoSec WebUI
+# Repo Analysis
 
 A local React/Vite interface for running the globally installed RepoSec analyzer against GitHub and GitLab repositories.
 
