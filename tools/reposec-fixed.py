@@ -14,6 +14,14 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 from html import escape
 
+REPOSEC_TMP_ROOT = Path(os.environ.get("REPOSEC_TMP_DIR", "/tmp")).resolve()
+REPOSEC_TMP_ROOT.mkdir(parents=True, exist_ok=True)
+
+def reposec_tmp(name: str) -> str:
+    """Return a per-job temporary path supplied by the WebUI backend."""
+    return str(REPOSEC_TMP_ROOT / name)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ANSI COLOURS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -306,7 +314,7 @@ def phase_osint(repo_path: str) -> List[Finding]:
 
     # ── Gitleaks ──────────────────────────────────────────
     if tool_available("gitleaks"):
-        out_f = "/tmp/gitleaks_report.json"
+        out_f = reposec_tmp("gitleaks_report.json")
         cmd = f"gitleaks detect --source . --report-format json --report-path {out_f} --no-banner"
         cmd_print(cmd)
         rc, _, _ = run(cmd, cwd=repo_path, timeout=120)
@@ -421,6 +429,9 @@ def phase_osint(repo_path: str) -> List[Finding]:
             ))
             grep_count += 1
     ok(f"grep: {grep_count} hardcoded credential patterns found")
+    _print_phase_summary(findings, "osint")
+    return findings
+
 
 INLINE_RULES: List[Dict] = [
 
@@ -1291,7 +1302,7 @@ def phase_sca(repo_path: str) -> List[Finding]:
 
     # ── Syft — SBOM generation ────────────────────────────
     if tool_available("syft"):
-        sbom_f = "/tmp/sbom.json"
+        sbom_f = reposec_tmp("sbom.json")
         cmd = f"syft . -o json={sbom_f} 2>/dev/null"
         cmd_print(cmd)
         run(cmd, cwd=repo_path, timeout=180)
@@ -1310,7 +1321,7 @@ def phase_sca(repo_path: str) -> List[Finding]:
 
     # ── Grype — vulnerability scan ────────────────────────
     if tool_available("grype"):
-        out_f = "/tmp/grype.json"
+        out_f = reposec_tmp("grype.json")
         cmd = f"grype . --output json --file {out_f} 2>/dev/null"
         cmd_print(cmd)
         run(cmd, cwd=repo_path, timeout=300)
@@ -1351,7 +1362,7 @@ def phase_sca(repo_path: str) -> List[Finding]:
             dc_cmd = c
             break
     if dc_cmd:
-        out_dir = "/tmp/dc_report"
+        out_dir = reposec_tmp("dc_report")
         cmd = (f"{dc_cmd} --scan . --format JSON "
                f"--out {out_dir} --noupdate 2>/dev/null")
         cmd_print(cmd)
@@ -1534,7 +1545,7 @@ def phase_sast(repo_path: str) -> List[Finding]:
 
     # ── Semgrep ───────────────────────────────────────────
     if tool_available("semgrep"):
-        out_f = "/tmp/semgrep.json"
+        out_f = reposec_tmp("semgrep.json")
         cmd = f"semgrep --config=auto --json --output={out_f} --quiet . 2>/dev/null"
         cmd_print(cmd)
         run(cmd, cwd=repo_path, timeout=300)
@@ -1572,7 +1583,7 @@ def phase_sast(repo_path: str) -> List[Finding]:
     # ── Bandit (Python) ───────────────────────────────────
     py_files = list(Path(repo_path).rglob("*.py"))
     if py_files and tool_available("bandit"):
-        out_f = "/tmp/bandit.json"
+        out_f = reposec_tmp("bandit.json")
         cmd = f"bandit -r . -f json -o {out_f} -q 2>/dev/null"
         cmd_print(cmd)
         run(cmd, cwd=repo_path, timeout=180)
@@ -1605,7 +1616,7 @@ def phase_sast(repo_path: str) -> List[Finding]:
     # ── Brakeman (Ruby) ───────────────────────────────────
     rb_files = list(Path(repo_path).rglob("*.rb"))
     if rb_files and tool_available("brakeman"):
-        out_f = "/tmp/brakeman.json"
+        out_f = reposec_tmp("brakeman.json")
         cmd = f"brakeman -f json -o {out_f} --no-progress -q . 2>/dev/null"
         cmd_print(cmd)
         run(cmd, cwd=repo_path, timeout=180)
@@ -1706,7 +1717,7 @@ def phase_container(repo_path: str) -> List[Finding]:
 
     # ── Trivy ─────────────────────────────────────────────
     if tool_available("trivy"):
-        out_f = "/tmp/trivy.json"
+        out_f = reposec_tmp("trivy.json")
         cmd = f"trivy fs . --format json --output {out_f} --quiet 2>/dev/null"
         cmd_print(cmd)
         run(cmd, cwd=repo_path, timeout=300)
@@ -1878,7 +1889,7 @@ def phase_dast(repo_path: str, target_url: str = "") -> List[Finding]:
             break
 
     if zap_cmd:
-        out_f = "/tmp/zap_report.json"
+        out_f = reposec_tmp("zap_report.json")
         cmd = (f"{zap_cmd} -cmd -quickurl {target_url} "
                f"-quickout {out_f} -quickprogress 2>/dev/null")
         cmd_print(cmd)
