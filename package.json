@@ -1,7 +1,7 @@
 {
   "name": "software-vetter-reposec",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.2.2",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -9,7 +9,9 @@
     "api": "node server/index.mjs",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "start": "node server/index.mjs",
+    "serve": "node server/index.mjs"
   },
   "dependencies": {
     "react": "^19.2.5",
