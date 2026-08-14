@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 
 interface ProgressPanelProps {
   engine: any;
-  setActiveView: (v: "submit" | "progress" | "report") => void;
+  setActiveView: (v: "submit" | "progress" | "report" | "deploy") => void;
 }
 
 export function ProgressPanel({ engine, setActiveView }: ProgressPanelProps) {
