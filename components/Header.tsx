@@ -1,10 +1,10 @@
-import { ShieldCheck, GitBranch, Activity, FileText, Lock } from "lucide-react";
+import { ShieldCheck, GitBranch, Activity, FileText, Lock, Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
-  activeView: "submit" | "progress" | "report";
-  setActiveView: (v: "submit" | "progress" | "report") => void;
+  activeView: "submit" | "progress" | "report" | "deploy";
+  setActiveView: (v: "submit" | "progress" | "report" | "deploy") => void;
   engine: any;
 }
 
@@ -13,6 +13,7 @@ export function Header({ activeView, setActiveView, engine }: HeaderProps) {
     { id: "submit", label: "Submit", icon: GitBranch },
     { id: "progress", label: "Progress", icon: Activity },
     { id: "report", label: "Report", icon: FileText },
+    { id: "deploy", label: "Deploy Guide", icon: Terminal },
   ] as const;
 
   return (
