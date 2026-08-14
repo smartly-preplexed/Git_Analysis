@@ -1,0 +1,29 @@
+[Unit]
+Description=Software Vetter RepoSec WebUI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=software-vetter
+Group=software-vetter
+WorkingDirectory=/opt/software-vetter-reposec
+Environment=NODE_ENV=production
+Environment=API_HOST=127.0.0.1
+Environment=API_PORT=8787
+Environment=MAX_CONCURRENT_SCANS=2
+Environment=MAX_QUEUED_SCANS=20
+Environment=ANALYSIS_TIMEOUT_MINUTES=60
+Environment=JOB_RETENTION_HOURS=24
+Environment=REPOSEC_RUN_DIR=/var/tmp/software-vetter-reposec-runs
+Environment=REPOSEC_ALLOWED_GIT_HOSTS=github.com,gitlab.com
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateDevices=true
+ProtectSystem=full
+ReadWritePaths=/var/tmp/software-vetter-reposec-runs
+
+[Install]
+WantedBy=multi-user.target
